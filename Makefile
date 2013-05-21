@@ -14,7 +14,7 @@ ALL_CLASSES = `find java/src -name "*.class"`
 
 jar: $(CLASSES)
 	$(shell mkdir -p dist)
-	$(JAR) $(JAR_NAME) -C java/src/ edu
+	$(JAR) $(JAR_NAME) -C bin edu
 
 analytics: 
 	$(MAKE) -C proj/analytic
