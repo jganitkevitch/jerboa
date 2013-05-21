@@ -5,12 +5,11 @@
 package edu.jhu.jerboa.sim;
 
 import edu.jhu.jerboa.util.*;
+
 import java.io.*;
-import edu.jhu.jerboa.processing.IStreamingContainer;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Random;
-import java.util.Vector;
 import java.util.Hashtable;
 import java.util.Enumeration;
 import java.util.logging.Logger;
@@ -69,31 +68,37 @@ public class SLSH implements IFeatureContainer, ISimilarity {
   }
 
   /**
-     Initializes the random number generator, as well as the pool.
+   * Reads initialization parameters from global properties.
+   */
+  public void initialize() throws Exception {
+    initialize(JerboaProperties.getInt("SLSH.numBits", 64),
+        JerboaProperties.getInt("SLSH.poolSize", 100000), JerboaProperties.getLong("SLSH.seed", 0));
+  }
 
-     SLSH.seed : (long) if not set, or set to 0, then will create a "random"
-     Random object. Otherwise uses the given seed.
-     Underlying Hash object will use this same seed.
-  */
-  public void initialize () throws Exception {
-    numBits = JerboaProperties.getInt("SLSH.numBits",64);
-    pool = new double[JerboaProperties.getInt("SLSH.poolSize",100000)];
+  /**
+   * Initializes the random number generator, as well as the pool.
+   * 
+   * SLSH.seed : (long) if not set, or set to 0, then will create a "random" Random object.
+   * Otherwise uses the given seed. Underlying Hash object will use this same seed.
+   */
+  public void initialize(int num_bits, int pool_size, long seed) throws Exception {
+    numBits = num_bits;
+    pool = new double[pool_size];
 
     filter = false;
 
-    long seed = JerboaProperties.getLong("SLSH.seed",0);
     if (seed == 0) {
-	    logger.info("Default value for SLSH.seed provided, using a random seed");
-	    random = new Random();
+      logger.info("Default value for SLSH.seed provided, using a random seed");
+      random = new Random();
     } else
-	    random = new Random(seed);
+      random = new Random(seed);
 
     salts = Hash.generateSalts(numBits, random);
 
     if (signatures != null)
-	    signatures.clear();
+      signatures.clear();
     else
-      signatures = new Hashtable<String,Signature>();
+      signatures = new Hashtable<String, Signature>();
 
     readFilter();
 
@@ -125,6 +130,9 @@ public class SLSH implements IFeatureContainer, ISimilarity {
     }
   }
 
+  public void initializeSignature(Signature sig) {
+    sig.sums = new float[numBits];
+  }  
 
   /**
      Same as buildSignatures(false)
@@ -167,6 +175,13 @@ public class SLSH implements IFeatureContainer, ISimilarity {
       sig.bytes = makeBitVector(sig.sums);
       if (clearSums)
         sig.sums = null;
+    }
+  }
+  
+  public void buildSignature(Signature sig, boolean clear_sums) {
+    if (sig.sums != null && sig.sums.length > 0) {
+      sig.bytes = makeBitVector(sig.sums);
+      if (clear_sums) sig.sums = null;
     }
   }
 
@@ -266,6 +281,22 @@ public class SLSH implements IFeatureContainer, ISimilarity {
       for (int i = 0; i < numBits; i++)
         sig.sums[i] += pool[Hash.hash(feature,salts[i],pool.length)];
     }
+  }
+  
+  public void updateSignature(Signature sig, String feature, double value, int strength) {
+    sig.strength += strength;
+    if (sig.sums == null) sig.sums = new float[numBits];
+
+    for (int i = 0; i < numBits; i++)
+      sig.sums[i] += value * pool[Hash.hash(feature, salts[i], pool.length)];
+  }
+
+  public void updateSignature(Signature sig, Signature other) {
+    sig.strength += other.strength;
+    if (sig.sums == null) sig.sums = new float[numBits];
+
+    for (int i = 0; i < numBits; i++)
+      sig.sums[i] += other.sums[i];
   }
 
   public SimpleImmutableEntry<String,Double>[] KBest(String x, int k, boolean max) {
