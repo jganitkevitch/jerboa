@@ -33,8 +33,11 @@ public class SLSH implements IFeatureContainer, ISimilarity {
   private static Logger logger = Logger.getLogger(SLSH.class.getName());
   private static final long serialVersionUID = 1L;
 
-  // Pool of random numbers
-  double[] pool;
+  // Pool of random numbers. Only allowing power-of-2 lengths.
+  float[] pool;
+  // Bitmask for fast modulo-to-pool-range
+  int mask;
+  
   // Number of bits (b)
   public int numBits;
   // One salt per bit
@@ -72,7 +75,8 @@ public class SLSH implements IFeatureContainer, ISimilarity {
    */
   public void initialize() throws Exception {
     initialize(JerboaProperties.getInt("SLSH.numBits", 64),
-        JerboaProperties.getInt("SLSH.poolSize", 100000), JerboaProperties.getLong("SLSH.seed", 0));
+        JerboaProperties.getInt("SLSH.poolSize", 17), 
+        JerboaProperties.getLong("SLSH.seed", 0));
   }
 
   /**
@@ -83,8 +87,9 @@ public class SLSH implements IFeatureContainer, ISimilarity {
    */
   public void initialize(int num_bits, int pool_size, long seed) throws Exception {
     numBits = num_bits;
-    pool = new double[pool_size];
-
+    pool = new float[1 << pool_size];
+    mask = (1 << pool_size) - 1;
+    
     filter = false;
 
     if (seed == 0) {
@@ -103,7 +108,7 @@ public class SLSH implements IFeatureContainer, ISimilarity {
     readFilter();
 
     for (int i = 0; i < pool.length; i++)
-      pool[i] = random.nextGaussian();
+      pool[i] = (float) random.nextGaussian();
   }
 
 
@@ -188,7 +193,7 @@ public class SLSH implements IFeatureContainer, ISimilarity {
 
   // based on http://infolab.stanford.edu/~manku/bitcount/bitcount.html
   final static int bitsIn[] = {0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5,1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5,2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5,2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7,1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5,2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7,2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7,3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7,4,5,5,6,5,6,6,7,5,6,6,7,6,7,7,8};
-  final static double factor = Math.PI/8.0;
+  final static float factor = (float) Math.PI / 8.0f;
 
   public static double approximateCosine (byte[] x, byte[] y) {
     double diff = 0.0;
@@ -242,7 +247,7 @@ public class SLSH implements IFeatureContainer, ISimilarity {
 	    sig.sums = new float[numBits];
 
     for (int i = 0; i < numBits; i++)
-      sig.sums[i] += value * pool[Hash.hash(feature,salts[i],pool.length)];
+      sig.sums[i] += value * pool[Hash.hash(feature, salts[i], mask)];
   }
 
   public void update (String key, String feature, double value) {
@@ -258,7 +263,7 @@ public class SLSH implements IFeatureContainer, ISimilarity {
 	    sig.sums = new float[numBits];
 
     for (int i = 0; i < numBits; i++)
-      sig.sums[i] += value * pool[Hash.hash(feature,salts[i],pool.length)];
+      sig.sums[i] += value * pool[Hash.hash(feature, salts[i], mask)];
   }
 
   /**
@@ -279,19 +284,21 @@ public class SLSH implements IFeatureContainer, ISimilarity {
         sig.sums = new float[numBits];
       feature = features.next();
       for (int i = 0; i < numBits; i++)
-        sig.sums[i] += pool[Hash.hash(feature,salts[i],pool.length)];
+        sig.sums[i] += pool[Hash.hash(feature, salts[i], mask)];
     }
   }
   
-  public void updateSignature(Signature sig, String feature, double value, int strength) {
-    sig.strength += strength;
-    if (sig.sums == null) sig.sums = new float[numBits];
-
+  public final void updateSums(float[] sums, String feature, float value) {
     for (int i = 0; i < numBits; i++)
-      sig.sums[i] += value * pool[Hash.hash(feature, salts[i], pool.length)];
+      sums[i] += value * pool[Hash.hash(feature, salts[i], mask)];
   }
 
-  public void updateSignature(Signature sig, Signature other) {
+  public final void updateSums(float[] sums, String feature, int value) {
+    for (int i = 0; i < numBits; i++)
+      sums[i] += value * pool[Hash.hash(feature, salts[i], mask)];
+  }
+  
+  public final void updateSignature(Signature sig, Signature other) {
     sig.strength += other.strength;
     if (sig.sums == null) sig.sums = new float[numBits];
 
@@ -437,9 +444,9 @@ public class SLSH implements IFeatureContainer, ISimilarity {
     numBits = in.readInt();
     if (in.readBoolean()) { // containsSupport
 	    int length = in.readInt(); // poolSize
-	    pool = new double[length];
+	    pool = new float[length];
 	    for (int i = 0; i < length; i++)
-        pool[i] = in.readDouble();
+        pool[i] = in.readFloat();
 	    length = in.readInt(); // numSalts
 	    salts = new int[length];
 	    for (int i = 0; i < length; i++)
