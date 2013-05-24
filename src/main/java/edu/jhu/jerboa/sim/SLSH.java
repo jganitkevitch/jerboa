@@ -298,6 +298,11 @@ public class SLSH implements IFeatureContainer, ISimilarity {
       sums[i] += value * pool[Hash.hash(feature, salts[i], mask)];
   }
   
+  public final void hashToSums(float[] sums, String feature) {
+    for (int i = 0; i < numBits; i++)
+      sums[i] = pool[Hash.hash(feature, salts[i], mask)];
+  }
+  
   public final void updateSignature(Signature sig, Signature other) {
     sig.strength += other.strength;
     if (sig.sums == null) sig.sums = new float[numBits];
