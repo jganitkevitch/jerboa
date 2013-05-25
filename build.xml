@@ -17,7 +17,7 @@
 	</target>
 
 	<target name="jar" depends="compile">
-		<jar destfile="${build}/jerboa.jar">
+		<jar destfile="${dist}/jerboa.jar">
 			<fileset dir="${build}">
 				<include name="**/*.class" />
 			</fileset>
