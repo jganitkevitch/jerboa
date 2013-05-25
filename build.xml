@@ -1,0 +1,32 @@
+<project name="Jerboa" basedir="." default="jar">
+
+	<property name="src" value="./src/main/java" />
+	<property name="build" value="./bin" />
+	<property name="dist" value="./dist" />
+
+	<target name="init">
+		<tstamp />
+		<mkdir dir="${build}" />
+		<mkdir dir="${dist}" />
+	</target>
+
+	<target name="compile" depends="init">
+		<javac srcdir="${src}" destdir="${build}" debug="on" includeantruntime="false">
+			<compilerarg value="-Xlint" />
+		</javac>
+	</target>
+
+	<target name="jar" depends="compile">
+		<jar destfile="${build}/jerboa.jar">
+			<fileset dir="${build}">
+				<include name="**/*.class" />
+			</fileset>
+		</jar>
+	</target>
+
+	<target name="clean">
+		<delete verbose="true" quiet="true" dir="${build}" />
+		<delete verbose="true" quiet="true" dir="${dist}" />
+	</target>
+
+</project>
